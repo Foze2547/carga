@@ -1,0 +1,158 @@
+#include <Arduino.h>
+#include <WiFi.h>
+#include <MQTT.h>
+
+#define LED1    16
+#define LED2   17
+// Define motor control pins
+const int motorA1 = 22; // Motor A terminal 1
+const int motorA2 = 19; // Motor A terminal 2
+const int motorSpeed = 23; // PWM pin for motor speed control
+
+const char ssid[] = "vivo V21 5G";
+const char pass[] = "00000000";
+
+const char mqtt_broker[]="test.mosquitto.org";
+const char mqtt_topic[]="group/command";
+const char Motor[]="group/motor";
+const char mqtt_client_id[]="g23"; // must change this string to a unique value
+int MQTT_PORT=1883;
+
+int counter=0;
+int predistance = 0; // Declare receivedValue globally
+
+WiFiClient net;
+MQTTClient client;
+
+// Define ultrasonic sensor pins
+const int trigPin = 32; // Trigger pin of the ultrasonic sensor
+const int echoPin = 33; // Echo pin of the ultrasonic sensor
+
+void connect() {
+  Serial.print("checking wifi...");
+  while (WiFi.status() != WL_CONNECTED) {
+    Serial.print(".");
+    delay(1000);
+  }
+
+  Serial.print("\nconnecting...");
+  while (!client.connect(mqtt_client_id)) {  
+    Serial.print(".");
+    delay(1000);
+  }
+
+  Serial.println("\nconnected!");
+
+  client.subscribe(mqtt_topic);
+  // client.unsubscribe("/hello");
+}
+
+void messageReceived(String &topic, String &payload) {
+  //Serial.println("incoming: " + topic + " - " + payload);
+  //float distance = getDistance();
+
+  if (payload.toInt() <= 50 and payload.toInt() >= -50) {
+    // If distance is less than 25cm, stop the motor
+    stopMotor();
+  } 
+  if (payload.toInt() > 50) {
+    // Otherwise, move the motor forward at half speed
+    moveForward(payload.toInt()); // Approximately half of 255
+  }
+
+  if (payload.toInt() < -50) {
+    // Otherwise, move the motor forward at half speed
+    moveBackward(payload.toInt()-payload.toInt()-payload.toInt()); // Approximately half of 255
+  }
+  //client.publish(mqtt_topic, payload);
+}
+
+void mqtt() {
+  WiFi.begin(ssid, pass);
+
+  client.begin(mqtt_broker, MQTT_PORT, net);
+  client.onMessage(messageReceived);
+
+  connect();
+}
+
+// Function to initialize motor control pins
+void initializeMotor() {
+  pinMode(motorA1, OUTPUT);
+  pinMode(motorA2, OUTPUT);
+  pinMode(motorSpeed, OUTPUT);
+}
+
+// Function to move motor forward
+void moveForward(int speed) {
+  digitalWrite(motorA1, HIGH);
+  digitalWrite(motorA2, LOW);
+  analogWrite(motorSpeed, speed);
+}
+
+// Function to move motor backward
+void moveBackward(int speed) {
+  digitalWrite(motorA1, LOW);
+  digitalWrite(motorA2, HIGH);
+  analogWrite(motorSpeed, speed);
+}
+
+// Function to stop motor
+void stopMotor() {
+  digitalWrite(motorA1, LOW);
+  digitalWrite(motorA2, LOW);
+  analogWrite(motorSpeed, 0);
+}
+
+// Function to measure distance using ultrasonic sensor
+float getDistance() {
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+  
+  float duration = pulseIn(echoPin, HIGH);
+  float distance = duration * 0.034 / 2; // Calculate distance in cm
+  Serial.println(distance);
+  return distance;
+  
+}
+
+
+void setup() {
+  initializeMotor(); // Initialize motor control pins
+  Serial.begin(9600);
+
+  // Set ultrasonic sensor pins
+  /*pinMode(trigPin, OUTPUT);
+  pinMode(echoPin, INPUT);*/
+  mqtt();
+}
+
+void loop() {
+  client.loop();
+  delay(10);  // <- fixes some issues with WiFi stability
+
+  if (!client.connected()) {
+    connect();
+  }
+    //receiveAndDisplay();
+  //client.subscribe(mqtt_topic); 
+  /*float distance = getDistance(); // Get distance from ultrasonic sensor
+  client.publish(car, String(distance));
+
+  if (int(distance) == 13) {
+    // If distance is less than 25cm, stop the motor
+    stopMotor();
+  } 
+  if (int(distance) > 13) {
+    // Otherwise, move the motor forward at half speed
+    moveForward(255); // Approximately half of 255
+  }
+
+  if (int(distance) < 13) {
+    // Otherwise, move the motor forward at half speed
+    moveBackward(255); // Approximately half of 255
+  }*/
+}
